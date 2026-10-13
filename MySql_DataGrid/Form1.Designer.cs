@@ -316,7 +316,6 @@
             this.Controls.Add(this.listView1);
             this.Name = "frmMySQLconnessione";
             this.Text = "MySQLconnessione";
-            this.Load += new System.EventHandler(this.Form1_Load);
             this.pInserimento.ResumeLayout(false);
             this.pInserimento.PerformLayout();
             this.pOrdinamento.ResumeLayout(false);

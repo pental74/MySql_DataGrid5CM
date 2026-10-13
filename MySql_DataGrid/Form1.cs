@@ -26,22 +26,17 @@ namespace MySql_DataGrid
     public partial class frmMySQLconnessione : Form
     {
         // Stringhe di connessione al DB nel server DB db4free.net e al server di Uniserver Z in locale
-        public static string connStrInfinity = "server=db4free.net; user=maquilanti; database=db_multe; port=3306; password=qwertyuiop";
-        public static string connStrUniZ = "server=127.0.0.1;user=root;database=multe;port=3306;password=marco";
+        public static string connGithub = "server=db4free.net; user=maquilanti; database=db_multe; port=3306; password=qwertyuiop";
+        public static string connStrUniZ = "server=127.0.0.1;user=root;database=concessionario;port=3306;password=root";
 
         // stringa per la query dell'aggiornamento della List view
-        public string selquery = "SELECT Targa, Marca, Modello FROM auto";
+        public string selquery = "SELECT targa, marca, modello FROM auto";
         public string serverDB;
         MySqlConnection Connessione;
 
         public frmMySQLconnessione()
         {
             InitializeComponent();                     
-        }
-
-        private void Form1_Load(object sender, EventArgs e)
-        {
-            
         }
 
 
@@ -67,9 +62,9 @@ namespace MySql_DataGrid
 
                 while (dr.Read())
                 {
-                    string targa = dr.GetString("Targa");
-                    string marca = dr.GetString("Marca");
-                    string modello = dr.GetString("Modello");
+                    string targa = dr.GetString("targa");
+                    string marca = dr.GetString("marca");
+                    string modello = dr.GetString("modello");
 
                     lv1 = new ListViewItem(targa);
                     // colonne subitems
@@ -98,7 +93,7 @@ namespace MySql_DataGrid
             this.Close();
         }
 
-        //"DELETE FROM `auto` WHERE `auto`.`Targa` = "
+        //"DELETE FROM `auto` WHERE `auto`.`targa` = "
         private void button4_Click(object sender, EventArgs e)
         {
             // listView1.SelectedItems.Count > 0 Se un elemento della Listview è selezionato
@@ -107,7 +102,7 @@ namespace MySql_DataGrid
                 ApriConnessione(Connessione);
                 // in cancTarg inserisco il primo elemanto della riga selezionata
                 string cancTarga = listView1.SelectedItems[0].Text;
-                string querySQL = @"DELETE FROM `auto` WHERE `Targa` = '" + cancTarga+ @"'";
+                string querySQL = @"DELETE FROM `auto` WHERE `targa` = '" + cancTarga+ @"'";
                 MySqlCommand cmd2 = new MySqlCommand(querySQL, Connessione);
                 cmd2.ExecuteNonQuery();
                 ChiudiConnessione(Connessione);
@@ -142,7 +137,7 @@ namespace MySql_DataGrid
 
             // Composizione della query di inserimento con i valori delle variabili
             // $ per inserire in una stringa le variabili
-            string querySQL = $"INSERT INTO auto (Targa, Marca, Modello) VALUES ('{apTarga}','{apMarca}', '{apModello}')";
+            string querySQL = $"INSERT INTO auto (targa, marca, modello) VALUES ('{apTarga}','{apMarca}', '{apModello}')";
             
             // Passato il comando cmd con la query e la connessione al DB
             MySqlCommand cmd = new MySqlCommand(querySQL, Connessione);
@@ -163,21 +158,21 @@ namespace MySql_DataGrid
         // ORDER BY TARGA
         private void rdTarga_CheckedChanged(object sender, EventArgs e)
         {
-            String rdTargachecked = "SELECT * FROM `auto`ORDER BY `Targa`";
+            String rdTargachecked = "SELECT * FROM `auto`ORDER BY `targa`";
             lviVisualizzaAuto(rdTargachecked);
         }
 
         // ORDER BY MODELLO
         private void rdModello_CheckedChanged(object sender, EventArgs e)
         {
-            String rdModlellochecked = "SELECT * FROM `auto`ORDER BY `Modello`";
+            String rdModlellochecked = "SELECT * FROM `auto`ORDER BY `modello`";
             lviVisualizzaAuto(rdModlellochecked);
         }
 
         // ORDER BY MARCA
         private void rdMarca_CheckedChanged(object sender, EventArgs e)
         {
-            String rdMarcachecked = "SELECT * FROM `auto`ORDER BY `Marca`";
+            String rdMarcachecked = "SELECT * FROM `auto`ORDER BY `marca`";
             lviVisualizzaAuto(rdMarcachecked);
         }
 
@@ -185,7 +180,7 @@ namespace MySql_DataGrid
         {
 
             if (Convert.ToString(lbDBserver.SelectedItem) == "Uniserver Z (locale)") serverDB = connStrUniZ;
-            else if (Convert.ToString(lbDBserver.SelectedItem) == "db4free.net (remoto)") serverDB = connStrInfinity;
+            else if (Convert.ToString(lbDBserver.SelectedItem) == "db4free.net (remoto)") serverDB = connGithub;
 
             tbQuery.Text = serverDB;
             MySqlConnection Connessione = new MySqlConnection(serverDB);
@@ -208,6 +203,7 @@ namespace MySql_DataGrid
             }
             catch (Exception ex)
             {
+                MessageBox.Show(ex.Message);
                 return false;
             }
         }
@@ -224,6 +220,7 @@ namespace MySql_DataGrid
             }
             catch (Exception ex)
             {
+                MessageBox.Show(ex.Message);
                 return false;
             }
         }
