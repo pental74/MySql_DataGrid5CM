@@ -22,205 +22,300 @@ Selezionare il file voluto (compare un piccolo checkbox sulla sinistra) e clicca
 
 namespace MySql_DataGrid
 {
-    
     public partial class frmMySQLconnessione : Form
     {
-        // Stringhe di connessione al DB nel server DB db4free.net e al server di Uniserver Z in locale
-        public static string connGithub = "server=db4free.net; user=maquilanti; database=db_multe; port=3306; password=qwertyuiop";
+        // Configurazioni originali: verificare che il tunnel remoto sia ancora attivo.
+        public static string connGithub = "server=2.tcp.eu.ngrok.io; user=root; database=concessionario; port=11668; password=root";
         public static string connStrUniZ = "server=127.0.0.1;user=root;database=concessionario;port=3306;password=root";
 
-        // stringa per la query dell'aggiornamento della List view
         public string selquery = "SELECT targa, marca, modello FROM auto";
-        public string serverDB;
-        MySqlConnection Connessione;
+        public string serverDB = "";
+
+        private string colonnaOrdinamento = "";
 
         public frmMySQLconnessione()
         {
-            InitializeComponent();                     
+            InitializeComponent();
+            listView1.View = View.Details;
+            listView1.FullRowSelect = true;
+            listView1.MultiSelect = false;
+            listView1.Enabled = false;
+            pInserimento.Visible = false;
         }
 
+        private bool ServerDisponibile()
+        {
+            if (!string.IsNullOrWhiteSpace(serverDB))
+                return true;
 
+            MessageBox.Show("Selezionare prima un server MySQL.",
+                "Server non selezionato", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        // Ciascuna operazione usa una propria connessione, chiusa automaticamente.
         private void lviVisualizzaAuto(string q)
         {
+            if (!ServerDisponibile())
+                return;
+
             try
             {
-                // Apertura connessione
-                Connessione.Open();
-                    //throw new Exception("Errore nell'apertura della connessione.");
+                // Prepara i dati prima di sostituire quelli visualizzati.
+                System.Collections.Generic.List<ListViewItem> righe =
+                    new System.Collections.Generic.List<ListViewItem>();
 
-                // Query su tabella AUTO che visualizza tutti i record
-                //string sql = "SELECT Targa, Marca, Modello FROM auto";
-
-                MySqlCommand cmd = new MySqlCommand(q, Connessione);
-
-                MySqlDataReader dr = cmd.ExecuteReader();
-
-                // Pulizia della ListView >> metodo Clear
-                listView1.Items.Clear();
-                // variabile lv1 di tipo Item >> riga della lista
-                ListViewItem lv1;
-
-                while (dr.Read())
+                using (MySqlConnection conn = new MySqlConnection(serverDB))
                 {
-                    string targa = dr.GetString("targa");
-                    string marca = dr.GetString("marca");
-                    string modello = dr.GetString("modello");
+                    conn.Open();
+                    using (MySqlCommand cmd = new MySqlCommand(q, conn))
+                    using (MySqlDataReader dr = cmd.ExecuteReader())
+                    {
+                        while (dr.Read())
+                        {
+                            string targa = Convert.ToString(dr["targa"]);
+                            string marca = Convert.ToString(dr["marca"]);
+                            string modello = Convert.ToString(dr["modello"]);
 
-                    lv1 = new ListViewItem(targa);
-                    // colonne subitems
-                    lv1.SubItems.Add(marca);
-                    lv1.SubItems.Add(modello);
-                    // Aggiunta di una riga(item) alla ListView
-                    listView1.Items.Add(lv1);
+                            ListViewItem item = new ListViewItem(targa);
+                            item.SubItems.Add(marca);
+                            item.SubItems.Add(modello);
+                            righe.Add(item);
+                        }
+                    }
                 }
-                // Chiusura connessione
-               
-                Connessione.Close();
-                    throw new Exception("Errore nella chiusura della connessione.");
+
+                listView1.BeginUpdate();
+                try
+                {
+                    listView1.Items.Clear();
+                    listView1.Items.AddRange(righe.ToArray());
+                }
+                finally
+                {
+                    listView1.EndUpdate();
+                }
             }
             catch (Exception ex)
             {
-                ChiudiConnessione(Connessione);
-                MessageBox.Show("Errore: " + ex.Message);
+                MessageBox.Show("Impossibile caricare le auto:\n" + ex.Message,
+                    "Errore MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
+        private void AggiornaLista()
+        {
+            string query = selquery;
+            if (!string.IsNullOrEmpty(colonnaOrdinamento))
+                query += " ORDER BY `" + colonnaOrdinamento + "`";
 
+            lviVisualizzaAuto(query);
+        }
 
         private void button2_Click(object sender, EventArgs e)
         {
-            // Chiude il Form !!
             this.Close();
         }
 
-        //"DELETE FROM `auto` WHERE `auto`.`targa` = "
+        // Cancella l'auto selezionata.
         private void button4_Click(object sender, EventArgs e)
         {
-            // listView1.SelectedItems.Count > 0 Se un elemento della Listview è selezionato
-            if (listView1.SelectedItems.Count > 0)
+            if (!ServerDisponibile())
+                return;
+
+            if (listView1.SelectedItems.Count == 0)
             {
-                ApriConnessione(Connessione);
-                // in cancTarg inserisco il primo elemanto della riga selezionata
-                string cancTarga = listView1.SelectedItems[0].Text;
-                string querySQL = @"DELETE FROM `auto` WHERE `targa` = '" + cancTarga+ @"'";
-                MySqlCommand cmd2 = new MySqlCommand(querySQL, Connessione);
-                cmd2.ExecuteNonQuery();
-                ChiudiConnessione(Connessione);
+                MessageBox.Show("Selezionare un'auto da cancellare.");
+                return;
+            }
 
-                // Visualizzazione nella Text box della query di cancellazione
-                tbQuery.Text = "Cancellata Auto con targa: " + listView1.SelectedItems[0].Text;
+            string cancTarga = listView1.SelectedItems[0].Text;
+            if (MessageBox.Show("Cancellare l'auto con targa " + cancTarga + "?",
+                "Conferma cancellazione", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
 
-                // Aggiorna la List view
-                lviVisualizzaAuto(selquery);                                               
-            }       
-                    
+            const string querySQL = "DELETE FROM `auto` WHERE `targa` = @targa";
+
+            try
+            {
+                int righeEliminate;
+                using (MySqlConnection conn = new MySqlConnection(serverDB))
+                {
+                    conn.Open();
+                    using (MySqlCommand cmd = new MySqlCommand(querySQL, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@targa", cancTarga);
+                        righeEliminate = cmd.ExecuteNonQuery();
+                    }
+                }
+
+                tbQuery.Text = righeEliminate > 0
+                    ? "Cancellata auto con targa: " + cancTarga
+                    : "Nessuna auto trovata con targa: " + cancTarga;
+                AggiornaLista();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Errore durante la cancellazione:\n" + ex.Message,
+                    "Errore MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void button3_Click(object sender, EventArgs e)
         {
-            pInserimento.Visible = true;
-
+            if (ServerDisponibile())
+                pInserimento.Visible = true;
         }
 
-
-        // Inserimento in AUTO
-        private void btnInserisci_Click(object sender, EventArgs e)
+        // Inserisce una nuova auto.
+        private void btnInserisci_Auto(object sender, EventArgs e)
         {
-            // I valori della nuova auto sono inseriti in variabili di appoggio
-            string apTarga = tbTarga.Text;
-            string apMarca = tbMarca.Text;
-            string apModello = tbModello.Text;
+            if (!ServerDisponibile())
+                return;
 
-            // Apertura connessione con DB
-            // vecchio - GestioneMySql.ApriConnessione();
-            ApriConnessione(Connessione);
+            string apTarga = tbTarga.Text.Trim();
+            string apMarca = tbMarca.Text.Trim();
+            string apModello = tbModello.Text.Trim();
 
-            // Composizione della query di inserimento con i valori delle variabili
-            // $ per inserire in una stringa le variabili
-            string querySQL = $"INSERT INTO auto (targa, marca, modello) VALUES ('{apTarga}','{apMarca}', '{apModello}')";
-            
-            // Passato il comando cmd con la query e la connessione al DB
-            MySqlCommand cmd = new MySqlCommand(querySQL, Connessione);
+            if (apTarga.Length == 0 || apMarca.Length == 0 || apModello.Length == 0)
+            {
+                MessageBox.Show("Compilare targa, marca e modello.",
+                    "Dati mancanti", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
-            // ExecuteNonQuery da utilizzare per ++!! insert, update, and delete data ++!!
-            cmd.ExecuteNonQuery();
-            // Chiusura connessione con il DB
-            ChiudiConnessione(Connessione);
+            const string querySQL =
+                "INSERT INTO `auto` (`targa`, `marca`, `modello`) " +
+                "VALUES (@targa, @marca, @modello)";
 
-            // visualizzazione delle query nel Text Box
-            tbQuery.Text = querySQL;
-            // Pannello inserimento oscurato
-            pInserimento.Visible = false;
-            // Aggiornamento dei dati nella List view   
-            lviVisualizzaAuto(selquery);
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(serverDB))
+                {
+                    conn.Open();
+                    using (MySqlCommand cmd = new MySqlCommand(querySQL, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@targa", apTarga);
+                        cmd.Parameters.AddWithValue("@marca", apMarca);
+                        cmd.Parameters.AddWithValue("@modello", apModello);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+
+                tbQuery.Text = "Inserita auto con targa: " + apTarga;
+                tbTarga.Clear();
+                tbMarca.Clear();
+                tbModello.Clear();
+                pInserimento.Visible = false;
+                AggiornaLista();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Errore durante l'inserimento:\n" + ex.Message,
+                    "Errore MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
-        // ORDER BY TARGA
         private void rdTarga_CheckedChanged(object sender, EventArgs e)
         {
-            String rdTargachecked = "SELECT * FROM `auto`ORDER BY `targa`";
-            lviVisualizzaAuto(rdTargachecked);
+            if (!rdTarga.Checked)
+                return;
+            colonnaOrdinamento = "targa";
+            if (listView1.Enabled)
+                AggiornaLista();
         }
 
-        // ORDER BY MODELLO
         private void rdModello_CheckedChanged(object sender, EventArgs e)
         {
-            String rdModlellochecked = "SELECT * FROM `auto`ORDER BY `modello`";
-            lviVisualizzaAuto(rdModlellochecked);
+            if (!rdModello.Checked)
+                return;
+            colonnaOrdinamento = "modello";
+            if (listView1.Enabled)
+                AggiornaLista();
         }
 
-        // ORDER BY MARCA
         private void rdMarca_CheckedChanged(object sender, EventArgs e)
         {
-            String rdMarcachecked = "SELECT * FROM `auto`ORDER BY `marca`";
-            lviVisualizzaAuto(rdMarcachecked);
+            if (!rdMarca.Checked)
+                return;
+            colonnaOrdinamento = "marca";
+            if (listView1.Enabled)
+                AggiornaLista();
         }
 
         private void lbDBserver_SelectedIndexChanged(object sender, EventArgs e)
         {
+            string scelta = Convert.ToString(lbDBserver.SelectedItem);
+            listView1.Enabled = false;
+            listView1.Items.Clear();
+            pInserimento.Visible = false;
 
-            if (Convert.ToString(lbDBserver.SelectedItem) == "Uniserver Z (locale)") serverDB = connStrUniZ;
-            else if (Convert.ToString(lbDBserver.SelectedItem) == "db4free.net (remoto)") serverDB = connGithub;
+            if (scelta == "Uniserver Z (locale)")
+                serverDB = connStrUniZ;
+            else if (scelta == "Github (remoto)")
+                serverDB = connGithub;
+            else
+            {
+                serverDB = "";
+                tbQuery.Text = "Selezionare un server.";
+                return;
+            }
 
-            tbQuery.Text = serverDB;
-            MySqlConnection Connessione = new MySqlConnection(serverDB);
-            //ApriConnessione(Connessione);
-        // Carica in List view tutti i record della tabella Auto
-        lviVisualizzaAuto(selquery);
+            string messaggio;
+            using (MySqlConnection conn = new MySqlConnection(serverDB))
+            {
+                if (!ApriConnessione(conn))
+                {
+                    tbQuery.Text = "Connessione fallita: " + scelta;
+                    return;
+                }
+                // La connessione di prova viene chiusa dal blocco using.
+            }
 
+            tbQuery.Text = "Connesso a: " + scelta;
+            listView1.Enabled = true;
+            AggiornaLista();
         }
 
+        // Metodi mantenuti per compatibilità con eventuali chiamate esistenti.
         public static bool ApriConnessione(MySqlConnection conn)
         {
+            if (conn == null)
+            {
+                MessageBox.Show("Connessione MySQL non inizializzata.");
+                return false;
+            }
 
             try
             {
-                if (conn.State != System.Data.ConnectionState.Open)
-                {
+                if (conn.State != ConnectionState.Open)
                     conn.Open();
-                }
                 return true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                MessageBox.Show(ex.Message, "Errore connessione",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
         }
 
         public static bool ChiudiConnessione(MySqlConnection conn)
         {
+            if (conn == null)
+                return true;
+
             try
             {
-                if (conn.State != System.Data.ConnectionState.Closed)
-                {
+                if (conn.State != ConnectionState.Closed)
                     conn.Close();
-                }
                 return true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                MessageBox.Show(ex.Message, "Errore chiusura connessione",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
         }
